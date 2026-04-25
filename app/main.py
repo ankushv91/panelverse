@@ -4,11 +4,16 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.domains.user.model import Users
+from app.api.domains.user.model import User
 from app.api.domains.user.schema import UserResponse
+
+from app.api.domains.user.routes import router as user_router
+from app.api.domains.auth.routes import router as auth_ruter
 
 app = FastAPI(title="PanelVerse API")
 
+app.include_router(user_router)
+app.include_router(auth_ruter)
 
 @app.get("/")
 def root():
@@ -21,5 +26,5 @@ def test_db(db: Session = Depends(get_db)):
 
 @app.get("/test-users", response_model=List[UserResponse])
 def test_users(db: Session = Depends(get_db)):
-    users = db.query(Users).all()
+    users = db.query(User).all()
     return users
