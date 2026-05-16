@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.api.domains.user.model import User
 
 # oauth2_schema = OAuth2PasswordBearer(tokenUrl="/auth/login")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 def get_db():
     db = SessionLocal()
@@ -28,13 +28,17 @@ def get_current_user(
         db: Session = Depends(get_db)
         ):
     
-    token = credentials.credentials
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials"
         )
     
+    if credentials is None:
+        raise credentials_exception
+
+    token = credentials.credentials
+    
+    # decoding the token
     try:
         payload = jwt.decode(
             token,
@@ -45,7 +49,6 @@ def get_current_user(
         user_id = payload.get("sub")
         if not user_id:
             raise credentials_exception
-        
     except JWTError:
         raise credentials_exception
     
@@ -56,8 +59,20 @@ def get_current_user(
     
     if user.is_deleted:
         raise credentials_exception
-    
+        
     return user
+
+# when there's a logged in mode and guest mode interfaces
+def get_current_user_optional(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        db: Session = Depends(get_db)
+):
+    if credentials is None:
+        return None
+    try: # use the strict logic, if header exists
+        return get_current_user(credentials, db)
+    except HTTPException: # in case it fails treat as a guest
+        return None
 
 def require_role(required_roles: list[str]):
     def role_checker(current_user: User = Depends(get_current_user)):

@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
 from app.api.domains.user.model import User
 from app.core.security import verify_password, create_access_token
@@ -18,6 +19,9 @@ def login_user(db: Session, email: str, password: str):
     user = authenticate_user(db, email, password)
 
     if not user:
+        return None
+    
+    if user.is_deleted:
         return None
     
     token = create_access_token({"sub": str(user.id)})
