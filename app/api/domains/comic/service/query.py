@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from app.api.domains.comic.model import Comic, ComicAuthor, ComicGenre, Chapter, Bookmark, Genre
+from app.api.domains.comic.model import Comic, ComicAuthor, ComicGenre, Bookmark, Genre
 from app.api.domains.user.model import User
 
 def get_comic_details_query(db: Session, comic_id: int):

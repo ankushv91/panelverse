@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, status, Response, Query, HTTPException
+from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Literal
 
 from app.api.deps import get_db, require_admin
-from app.api.domains.user.schema import UserCreate, UserCompleteDetails, UserUpdate, AuthorCreate, AuthorCompleteDetail, AuthorUpdate, RegisterResponse
-from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit, ChapterDetail, ChapterCompleteDetail, ChapterCreate, PageDetail, PageCreate, GenreDetail, BookmarkDetail, RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail
-from app.api.domains.comic.service.comic import create_comic, get_all_comics, get_comic, edit_comic, delete_comic, change_comic_approval
-from app.api.domains.comic.service.chapter import add_chapter_pages, delete_chapter_pages, get_comic_chapters_query, get_chapter_pages_query, change_chapter_approval
+from app.api.domains.user.schema import UserCompleteDetails
+from app.api.domains.comic.schema import ComicDetail, ChapterDetail
+from app.api.domains.comic.service.comic import get_all_comics, delete_comic, change_comic_approval
+from app.api.domains.comic.service.chapter import delete_chapter_pages, get_comic_chapters_query, change_chapter_approval
 from app.api.domains.user.model import User
-from app.api.domains.user.service import create_user, create_author, update_user_profile, delete_user, update_author_profile
+from app.api.domains.user.service import delete_user
 from app.api.domains.comment.schema import CommentDeleted
 from app.api.domains.comment.service import delete_comment
 

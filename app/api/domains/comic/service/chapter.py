@@ -3,8 +3,8 @@ from fastapi import HTTPException, status
 from typing import Literal
 from app.api.domains.user.model import User
 from app.api.domains.comic.model import Chapter, Page, ComicAuthor
-from app.api.domains.comic.schema import ChapterCreate, ChapterDetail, ChapterCompleteDetail, PageCreate, PageDetail
-from app.api.domains.comic.service.query import get_comic_authors_query, get_bookmark_status_query, get_comic_details_query, get_genres_query
+from app.api.domains.comic.schema import ChapterCreate, ChapterCompleteDetail, PageCreate, PageDetail
+from app.api.domains.comic.service.query import get_comic_details_query
 
 def add_chapter_pages(
         db: Session,

@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Identity, CheckConstraint, func, Numeric, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Identity, CheckConstraint, func, ForeignKey
 from app.db.base import Base
 
 class Comment(Base):

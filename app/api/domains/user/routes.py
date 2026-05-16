@@ -1,14 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.deps import get_current_user
 
-from app.api.domains.user.schema import UserCreate, UserCompleteDetails, UserUpdate, AuthorCreate, AuthorCompleteDetail, AuthorUpdate, RegisterResponse
-from app.api.domains.user.service import create_user, create_author, update_user_profile, delete_user, update_author_profile
-from app.api.domains.user.model import User, Author
-from app.api.deps import require_admin, require_author
-from app.api.deps import require_author
+from app.api.domains.user.schema import UserCreate, UserCompleteDetails, UserUpdate, RegisterResponse
+from app.api.domains.user.service import create_user, update_user_profile, delete_user
+from app.api.domains.user.model import User
 from app.core.security import create_access_token
 
 router = APIRouter(prefix="/users", tags=["Users"])

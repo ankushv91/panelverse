@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, status, Response
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_user
 from app.api.domains.user.model import User
-from app.api.domains.comment.model import Comment
 from app.api.domains.comment.schema import CommentDetail, CommentCreate, CommentDeleted
 from app.api.domains.comment.service import create_comment, get_root_comments, get_comment_replies, delete_comment
 

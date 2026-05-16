@@ -21,7 +21,6 @@ app.include_router(comic_router)
 app.include_router(comment_router)
 app.include_router(admin_router)
 
-
 @app.get("/")
 def root():
     return {"message": "PanelVerse API is running"}

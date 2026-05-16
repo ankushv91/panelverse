@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, status, Response, Query
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.orm import Session
 from typing import Literal
 
-from app.api.deps import get_db, get_current_user, get_current_user_optional, require_author, require_admin
-from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit, ChapterDetail, ChapterCompleteDetail, ChapterCreate, PageDetail, PageCreate, GenreDetail, BookmarkDetail, RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail
+from app.api.deps import get_db, get_current_user, get_current_user_optional, require_author
+from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit, ChapterDetail, ChapterCompleteDetail, ChapterCreate, PageCreate, GenreDetail, BookmarkDetail, RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail
 from app.api.domains.comic.service.comic import create_comic, get_all_comics, get_comic, edit_comic, delete_comic
 from app.api.domains.comic.service.interaction import create_bookmark_interaction, delete_bookmark_interaction, rate_comic, delete_rating, get_rating, upsert_reading_progress, get_reading_progress
 from app.api.domains.comic.service.query import get_genres_query

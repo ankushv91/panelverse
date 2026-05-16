@@ -3,7 +3,7 @@ from sqlalchemy import func
 from typing import Literal
 from app.api.domains.comic.model import Comic, ComicAuthor, ComicGenre, Chapter, Bookmark
 from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit
-from app.api.domains.user.model import User, Author
+from app.api.domains.user.model import User
 from fastapi import HTTPException, status, Query
 
 from app.api.domains.comic.service.query import get_comic_authors_query, get_bookmark_status_query, get_comic_details_query, get_genres_query
