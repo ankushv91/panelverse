@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from app.api.domains.user.model import User
-from app.api.domains.comic.model import Bookmark, Comic, Rating, ReadingProgress
-from app.api.domains.comic.schema import RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail
+from app.api.domains.comic.model import Bookmark, Comic, Rating, ReadingProgress, Chapter
+from app.api.domains.comic.schema import RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail, ReadingProgressComicDetail
 from fastapi import HTTPException, status
 
 def create_bookmark_interaction(
@@ -15,7 +15,7 @@ def create_bookmark_interaction(
         user_id = current_user.id,
         comic_id = comic_id
     )
-    
+
     comic = db.query(Comic).filter(
         Comic.id == comic_id, 
         Comic.approval_status == "approved"
@@ -26,6 +26,16 @@ def create_bookmark_interaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comic does not exist"
             )
+    
+    does_exist = db.query(Bookmark).filter(
+        Bookmark.user_id == current_user.id,
+        Bookmark.comic_id == comic_id).first()
+    
+    if does_exist:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bookmark already exists"
+        )
 
     db.add(new_bookmark)
     db.commit()
@@ -209,3 +219,38 @@ def get_reading_progress(
         return result
     
     return query.all()
+def get_reading_progress_comics(
+    db: Session,
+    current_user: User,
+    limit: int = 10,
+    offset: int = 0
+) -> list[ReadingProgressComicDetail]:
+    results = (
+        db.query(Comic, Chapter, ReadingProgress.updated_at)
+        .join(ReadingProgress, ReadingProgress.comic_id == Comic.id)
+        .join(Chapter, ReadingProgress.chapter_id == Chapter.id)
+        .filter(ReadingProgress.user_id == current_user.id)
+        .order_by(ReadingProgress.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+
+    continue_reading_list = []
+    
+    for comic, chapter, updated_at in results:
+        continue_reading_list.append({
+            "id": comic.id,
+            "title": comic.title,
+            "cover_image_url": comic.cover_image_url,
+            "avg_rating": comic.avg_rating,
+            "comic_status": comic.comic_status,
+            "view_count": comic.view_count,
+            "continue_chapter": {
+                "id": chapter.id,
+                "chapter_no": chapter.chapter_no
+            },
+            "updated_at": updated_at # Reading Progress row
+        })
+
+    return continue_reading_list

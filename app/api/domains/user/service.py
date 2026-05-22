@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile, Form, File
 from app.api.domains.user.model import User, Author
-from app.api.domains.user.schema import UserCreate, AuthorCreate, UserUpdate, AuthorUpdate
+from app.api.domains.user.schema import UserCreate
+from app.core.s3 import upload_image_s3
 from app.core.security import hash_password
 from sqlalchemy.exc import IntegrityError
 
@@ -62,19 +63,29 @@ def delete_any_user(db: Session, user_id:int):
         "details": "User deleted succesufully"
     }
 
-def create_author(
+async def create_author(
         db: Session,
-        author_data: AuthorCreate,
-        current_user: User
+        current_user: User,
+        name: str = Form(..., max_length=130),
+        about: str | None = Form(None),            
+        profile_pic: UploadFile | None = File(None)
     ) -> Author:
 
-    new_author = Author(
-        author_id = current_user.id,
-        name = author_data.name,
-        about = author_data.about,
-        profile_pic_url = author_data.profile_pic_url
-    )
+    new_author = Author()
 
+    if profile_pic is not None:
+        uploaded_s3_url = await upload_image_s3(
+            user_id=str(current_user.id),
+            path=("authors", "profile_pic"),
+            file=profile_pic
+        )
+        new_author.profile_pic_url = uploaded_s3_url
+
+    new_author.author_id = current_user.id
+    new_author.name = name
+    if about is not None:
+        new_author.about = about
+    
     current_user.role = "author"
 
     db.add(new_author)
@@ -92,32 +103,50 @@ def create_author(
 
     return new_author
 
-def update_user_profile(
+async def update_user_profile(
     db: Session,
-    user: User,
-    data: UserUpdate
+    current_user: User,
+    profile_pic: UploadFile | None = File(None),
+    username: str | None = Form(None)
 ) -> User:
-    update_data = data.model_dump(exclude_unset=True)
+    
+    if profile_pic is not None:
+        uploaded_s3_url = await upload_image_s3(
+            user_id=str(current_user.id),
+             path=("users", "profile_pic"),
+            file=profile_pic
+        )
+        current_user.profile_pic_url = uploaded_s3_url
 
-    for field, value in update_data.items():
-        setattr(user, field, value)
+    if username is not None:
+        current_user.username = username
 
     db.commit()
-    db.refresh(user)
+    db.refresh(current_user)
 
-    return user
+    return current_user
 
-def update_author_profile(
+async def update_author_profile(
         db: Session,
         current_user: User,
-        data: AuthorUpdate
+        name: str = Form(None, max_length=130),
+        about: str | None = Form(None),    
+        profile_pic: UploadFile | None = File(None),
 ) -> Author:
     author = db.query(Author).filter(Author.author_id == current_user.id).first()
 
-    update_data = data.model_dump(exclude_unset=True)
+    if profile_pic is not None:
+        uploaded_s3_url = await upload_image_s3(
+            user_id=str(current_user.id),
+            path=("authors", "profile_pic"),
+            file=profile_pic
+        )
+        author.profile_pic_url = uploaded_s3_url
 
-    for field, value in update_data.items():
-        setattr(author, field, value)
+    if name is not None:
+        author.name = name
+    if about is not None:
+        author.about = about    
 
     db.commit()
     db.refresh(author)

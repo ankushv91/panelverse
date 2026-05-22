@@ -1,24 +1,16 @@
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, status, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import Literal
 
 from app.api.deps import get_db, get_current_user, get_current_user_optional, require_author
-from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit, ChapterDetail, ChapterCompleteDetail, ChapterCreate, PageCreate, GenreDetail, BookmarkDetail, RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail
-from app.api.domains.comic.service.comic import create_comic, get_all_comics, get_comic, edit_comic, delete_comic
-from app.api.domains.comic.service.interaction import create_bookmark_interaction, delete_bookmark_interaction, rate_comic, delete_rating, get_rating, upsert_reading_progress, get_reading_progress
+from app.api.domains.comic.schema import ComicDetail, ChapterDetail, ChapterCompleteDetail, GenreDetail, BookmarkDetail, RatingDetail, RatingUpsert, ReadingProgressUpsert, ReadingProgressDetail, ReadingProgressComicDetail, ComicCompleteDetail
+from app.api.domains.comic.service.comic import get_all_comics, get_comic, edit_comic, delete_comic
+from app.api.domains.comic.service.interaction import create_bookmark_interaction, delete_bookmark_interaction, rate_comic, delete_rating, get_rating, upsert_reading_progress, get_reading_progress, get_reading_progress_comics
 from app.api.domains.comic.service.query import get_genres_query
-from app.api.domains.comic.service.chapter import add_chapter_pages, delete_chapter_pages, get_comic_chapters_query, get_chapter_pages_query
+from app.api.domains.comic.service.chapter import get_comic_chapters_query, get_chapter_pages_query
 from app.api.domains.user.model import User
 
 router = APIRouter(prefix="/comics", tags=["Comics"])
-
-@router.post("/", response_model=ComicDetail, status_code=status.HTTP_201_CREATED)
-def create_comic_endpoint(
-    comic_data: ComicCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_author)
-):
-    return create_comic(db, comic_data, current_user)
     
 @router.get("/", response_model=list[ComicDetail], status_code=status.HTTP_200_OK)
 def get_all_comics_endpoint(
@@ -28,7 +20,7 @@ def get_all_comics_endpoint(
     offset: int = 0,
     genre_ids: list[int] | None = Query(None),
     order_by: Literal["latest", "oldest", "popular"] = "latest",
-    approval_status: Literal["pending", "approved", "rejected"] = "approved",
+    approval_status: Literal["pending", "approved", "rejected"] | None = "approved",
     author_id: int | None = None,
     bookmarked: bool | None = None
     ):
@@ -83,26 +75,6 @@ def get_rating_endpoint(
 ):
     return get_rating(db, comic_id, current_user)
 
-@router.post("/{comic_id}/chapters", response_model=ChapterCompleteDetail, status_code=status.HTTP_200_OK)
-def add_chapter_pages_endpoint(
-    comic_id: int,
-    chapter_data: ChapterCreate,
-    page_data: list[PageCreate],
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_author)
-):
-    return add_chapter_pages(db, comic_id, chapter_data, page_data, current_user)
-
-@router.delete("/{comic_id}/chapters", status_code=status.HTTP_200_OK)
-def delete_chapter_pages_endpoint(
-    comic_id: int,
-    chapter_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_author)
-):
-    return delete_chapter_pages(db, comic_id, chapter_id, current_user)
-    
-
 @router.get("/{comic_id}/chapters", response_model=list[ChapterDetail], status_code=status.HTTP_200_OK)
 def get_chapters_endpoint(
     comic_id: int,
@@ -121,14 +93,25 @@ def get_chapter_pages_endpoint(
 ):
     return get_chapter_pages_query(db, comic_id, chapter_id)
 
-@router.get("/reading_progress", status_code=status.HTTP_200_OK, response_model=list[ReadingProgressDetail] | ReadingProgressDetail)
+@router.get("/reading_progress", status_code=status.HTTP_200_OK, response_model=list[ReadingProgressDetail])
 def get_reading_progress_endpoint(
     db: Session = Depends(get_db),
+    limit: int = 10,
+    offset: int = 0,
+    only_last: bool | None = None,
     current_user: User = Depends(get_current_user),
-    onlyLast: bool | None = None,
-    comic_id: int | None = None
 ):
-    return get_reading_progress(db, current_user, onlyLast, comic_id)
+    return get_reading_progress(db, current_user, limit, offset, only_last)
+
+# For ComicCard UI Component
+@router.get("/reading_progress_comics", status_code=status.HTTP_200_OK, response_model=list[ReadingProgressComicDetail])
+def get_reading_progress_comics_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    limit: int = 10,
+    offset: int = 0
+):
+    return get_reading_progress_comics(db, current_user, limit, offset)
 
 @router.put("/reading_progress/{comic_id}/{chapter_id}/{page_id}", status_code=status.HTTP_200_OK, response_model=ReadingProgressDetail)
 def upsert_reading_progress_endpoint(
@@ -141,19 +124,35 @@ def upsert_reading_progress_endpoint(
 @router.get("/{comic_id}", response_model=ComicCompleteDetail, status_code=status.HTTP_200_OK)
 def get_comic_endpoint(
     comic_id: int,
+    approved_only: bool = True,
     db: Session = Depends(get_db),
     current_user: User =  Depends(get_current_user_optional) # for bookmark status
 ):
-    return get_comic(db, comic_id, current_user)
+    return get_comic(db, comic_id,approved_only, current_user)
+
 
 @router.patch("/{comic_id}", response_model=ComicCompleteDetail, status_code=status.HTTP_200_OK)
-def edit_comic_endpoint(
-    comic_data: ComicEdit,
+async def edit_comic_endpoint(
     comic_id: int,
+    cover_image: UploadFile | None = File(None),
+    title: str = Form(None, max_length=255),
+    comic_status: Literal["ongoing", "completed", "hiatus"] = Form("ongoing"),
+    approval_status: Literal["pending", "approved", "rejected"] = Form("approved"),
+    description: str | None = Form(None),
+    genre_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_author)
 ):
-    return edit_comic(db, comic_data, comic_id, current_user)
+    return await edit_comic(
+        db=db,
+        current_user=current_user,
+        comic_id=comic_id,
+        cover_image=cover_image,
+        title=title,
+        comic_status=comic_status,
+        description=description,
+        genre_ids=genre_ids
+        )
 
 @router.delete("/{comic_id}", status_code=status.HTTP_200_OK)
 def delete_comic_endpoint(

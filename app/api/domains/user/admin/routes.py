@@ -31,7 +31,7 @@ def change_chapter_approval_endpoint(
     return change_chapter_approval(db, chapter_id, new_approval)
 
 @router.get("/comics/{comic_id}/chapters", response_model=list[ChapterDetail], status_code=status.HTTP_200_OK)
-def get_pending_chapters_endpoint(
+def get_chapters_endpoint(
     comic_id: int,
     db: Session = Depends(get_db),
     limit: int = 10,
@@ -42,7 +42,7 @@ def get_pending_chapters_endpoint(
     return get_comic_chapters_query(db, comic_id, limit, offset, approval_status, current_user)
 
 @router.get("/comics", response_model=list[ComicDetail], status_code=status.HTTP_200_OK)
-def get_all_pending_comics_endpoint(
+def get_all_comics_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
     limit: int = 10,

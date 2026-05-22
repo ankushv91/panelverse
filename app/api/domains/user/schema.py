@@ -18,11 +18,6 @@ class UserCompleteDetails(UserBase):
     class Config:
         from_attributes = True
 
-class UserUpdate(BaseModel):
-    username: str | None = Field(None, max_length=30)
-    profile_pic_url: str | None = None
-
-
 class RegisterResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -33,7 +28,6 @@ class AuthorBase(BaseModel):
 
 class AuthorCreate(AuthorBase):
     about: str | None = None
-    profile_pic_url: str | None = None
 
 class AuthorDetail(AuthorBase):
     author_id: int

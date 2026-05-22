@@ -64,14 +64,25 @@ class ChapterCompleteDetail(BaseModel):
     class Config:
         from_attributes = True
 
+class AddChapterPages(BaseModel):
+    id: int
+    chapter_no: int
+    chapter_name: str
+    
+    pages: list[PageDetail]
+
+    class Config:
+        from_attributes = True
+
 class ComicBase(BaseModel):
     title: str = Field(..., max_length=255)
     cover_image_url: str | None = None
     comic_status: Literal["ongoing", "completed", "hiatus"] = "ongoing"
+    approval_status: Literal["pending", "approved", "rejected"] = "approved",
 
 class ComicCreate(ComicBase):
     description: str | None = None
-    genre_ids: list[int] 
+    genre_ids: list[int]
 
 class ComicEdit(BaseModel):
     title: str | None = Field(None, max_length=255)
@@ -125,8 +136,26 @@ class ReadingProgressUpsert(BaseModel):
     chapter_id: int
     page_id: int
 
+
 class ReadingProgressDetail(ReadingProgressUpsert):
-    updated_at: datetime
+    latest_chapter: ChapterBase | None = None
+
+    class Comfig:
+        from_attributes = True
+
+# For ComicCard UI Component
+class ReadingProgressComicDetail(BaseModel):
+    id: int
+    title: str = Field(..., max_length=255)
+    cover_image_url: str | None = None
+    comic_status: Literal["ongoing", "completed", "hiatus"] = "ongoing"
+    approval_status: Literal["pending", "approved", "rejected"] = "approved",
+    avg_rating: float
+    view_count: int
+
+    continue_chapter: ChapterBase | None = None
+
+    updated_at: datetime # Reading Progress row update time
 
     class Comfig:
         from_attributes = True

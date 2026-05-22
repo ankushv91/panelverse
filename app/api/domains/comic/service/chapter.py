@@ -1,18 +1,20 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 from typing import Literal
 from app.api.domains.user.model import User
+from app.core.s3 import upload_image_s3
 from app.api.domains.comic.model import Chapter, Page, ComicAuthor
-from app.api.domains.comic.schema import ChapterCreate, ChapterCompleteDetail, PageCreate, PageDetail
+from app.api.domains.comic.schema import ChapterCompleteDetail, AddChapterPages, PageDetail
 from app.api.domains.comic.service.query import get_comic_details_query
 
-def add_chapter_pages(
-        db: Session,
-        comic_id: int,
-        chapter_data: ChapterCreate,
-        page_data: list[PageCreate],
-        current_user: User
-):
+async def add_chapter_pages(
+db: Session,
+    comic_id: int,
+    chapter_no: float,
+    chapter_name: str,
+    pages: list[UploadFile],
+    current_user: User
+) -> AddChapterPages:
     is_author = db.query(ComicAuthor).filter(
         ComicAuthor.comic_id == comic_id,
         ComicAuthor.author_id == current_user.id).first()
@@ -22,31 +24,38 @@ def add_chapter_pages(
 
     existing_chapter = db.query(Chapter).filter(
         Chapter.comic_id == comic_id,
-        Chapter.chapter_no == chapter_data.chapter_no
+        Chapter.chapter_no == chapter_no
     ).first()
     
     if existing_chapter:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Chapter {chapter_data.chapter_no} already exists for this comic."
+            detail=f"Chapter {chapter_no} already exists for this comic."
         )
     
     try:
         new_chapter = Chapter(
             comic_id=comic_id,
-            chapter_no=chapter_data.chapter_no,
-            chapter_name=chapter_data.chapter_name,
+            chapter_no=chapter_no,
+            chapter_name=chapter_name,
         )
         db.add(new_chapter)
         db.flush()
 
         pages_created = []
 
-        for page in page_data:
+        for index, page_file in enumerate(pages, start=1):
+            
+            uploaded_s3_url = await upload_image_s3(
+                user_id=str(current_user.id),
+                path=("authors", f"comics/{str(comic_id)}/chapters/{str(new_chapter.id)}/page_{index}"),
+                file=page_file
+            )
+
             new_page = Page(
                 chapter_id=new_chapter.id,
-                page_no=page.page_no,
-                image_url=page.image_url
+                page_no=index,
+                image_url=uploaded_s3_url
             )
             db.add(new_page)
             pages_created.append(new_page)
@@ -63,7 +72,7 @@ def add_chapter_pages(
             detail=f"An unexpected error occurred while saving the chapter: {str(e)}"
         )
     
-    return ChapterCompleteDetail(
+    return AddChapterPages(
         id=new_chapter.id,
         chapter_no=new_chapter.chapter_no,
         chapter_name=new_chapter.chapter_name,
@@ -110,6 +119,7 @@ def get_comic_chapters_query(
         limit: int | None = None,
         offset: int | None = None,
         approval_status: Literal["pending", "approved", "rejected"] = "approved",
+        current_user: User | None = None
     ):
     chapters = (
         db.query(Chapter)

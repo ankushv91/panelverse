@@ -3,15 +3,25 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.domains.comic.model import Comic, ComicAuthor, ComicGenre, Bookmark, Genre
 from app.api.domains.user.model import User
 
-def get_comic_details_query(db: Session, comic_id: int):
-    comic = (
-        db.query(Comic)
-        .filter(
-            Comic.id==comic_id,
+def get_comic_details_query(db: Session, comic_id: int, approval_status: bool | None = False):
+    
+    if approval_status:
+        comic = (
+            db.query(Comic)
+            .filter(
+                Comic.id==comic_id,
                 Comic.approval_status=="approved"
-            )
-            .first()
-    )
+                )
+                .first()
+        )
+    else:
+        comic = (
+            db.query(Comic)
+            .filter(
+                Comic.id==comic_id
+                )
+                .first()
+        )
 
     if not comic:
         raise HTTPException(

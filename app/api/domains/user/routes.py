@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, UploadFile, Form, File
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.deps import get_current_user
 
-from app.api.domains.user.schema import UserCreate, UserCompleteDetails, UserUpdate, RegisterResponse
+from app.api.domains.user.schema import UserCreate, UserCompleteDetails, RegisterResponse
 from app.api.domains.user.service import create_user, update_user_profile, delete_user
 from app.api.domains.user.model import User
 from app.core.security import create_access_token
@@ -22,12 +22,13 @@ def register_user_endpoint(user_data: UserCreate, db :Session = Depends(get_db))
     }
 
 @router.patch("/me", response_model=UserCompleteDetails)
-def edit_user_profile_endpoint(
-    data: UserUpdate,
+async def edit_user_profile_endpoint(
+    profile_pic: UploadFile | None = File(None),
+    username: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
     ):
-    return update_user_profile(db, current_user, data)
+    return await update_user_profile(db, current_user, profile_pic, username)
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

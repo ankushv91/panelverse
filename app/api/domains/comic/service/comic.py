@@ -2,63 +2,77 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Literal
 from app.api.domains.comic.model import Comic, ComicAuthor, ComicGenre, Chapter, Bookmark
-from app.api.domains.comic.schema import ComicCreate, ComicDetail, ComicCompleteDetail, ComicEdit
+from app.api.domains.comic.schema import ComicCompleteDetail
 from app.api.domains.user.model import User
-from fastapi import HTTPException, status, Query
+from app.core.s3 import upload_image_s3
+from fastapi import HTTPException, status, Query, UploadFile
 
 from app.api.domains.comic.service.query import get_comic_authors_query, get_bookmark_status_query, get_comic_details_query, get_genres_query
 
-def create_comic(
-        db: Session,
-        comic_data: ComicCreate, 
-        current_user: User
-    ) -> Comic:
+async def create_comic(
+    db: Session,
+    current_user: User,
+    cover_image: UploadFile | None,
+    title: str,
+    comic_status: str,
+    description: str | None,
+    genre_ids: list[int]
+) -> Comic:
 
     new_comic = Comic(
-        title=comic_data.title,
-        description=comic_data.description,
-        cover_image_url=comic_data.cover_image_url,
-        comic_status=comic_data.comic_status
+        title=title,
+        description=description,
+        comic_status=comic_status,
     )
 
     try:
         db.add(new_comic)
         db.flush()
 
+        if cover_image is not None:
+            uploaded_s3_url = await upload_image_s3(
+                user_id=str(current_user.id),
+                path=("authors", f"comics/{str(new_comic.id)}/cover_image"),
+                file=cover_image
+            )
+            new_comic.cover_image_url = uploaded_s3_url
+
         comic_author = ComicAuthor(
             comic_id=new_comic.id,
             author_id=current_user.id
         )
-
         db.add(comic_author)
 
-        for genre_id in comic_data.genre_ids:
+        for g_id in genre_ids:
             comic_genre = ComicGenre(
                 comic_id=new_comic.id,
-                genre_id=genre_id
+                genre_id=g_id
             )
-
             db.add(comic_genre)
 
         db.commit()
         db.refresh(new_comic)
 
-    except Exception:
+    except Exception as e:
         db.rollback()
-
+        print(f"Database error during comic creation: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unexpected error occured while creating the comic"
+            detail="Unexpected error occurred while creating the comic"
         )
     
     return new_comic
 
-def edit_comic(
-        db: Session,
-        comic_data: ComicEdit,
-        comic_id: int,
-        current_user: User
-) -> ComicDetail:
+async def edit_comic(
+    db: Session,
+    current_user: User,
+    comic_id: int,
+    cover_image: UploadFile | None,
+    title: str,
+    comic_status: str,
+    description: str | None,
+    genre_ids: list[int]
+) -> ComicCompleteDetail:
     
     comic = get_comic_details_query(db, comic_id)
     if not comic:
@@ -76,17 +90,27 @@ def edit_comic(
         )
 
     try:
-        update_data = comic_data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            if key != "genre_ids":
-                setattr(comic, key, value)
+        if title is not None:
+            comic.title = title
+        if description is not None:
+            comic.description = description
+        if comic_status is not None:
+            comic.comic_status = comic_status
 
-        if comic_data.genre_ids is not None:
+        if cover_image is not None:
+            uploaded_s3_url = await upload_image_s3(
+                user_id=str(current_user.id),
+                path=("authors", f"comics/{str(comic_id)}/cover_image"),
+                file=cover_image
+            )
+            comic.cover_image_url = uploaded_s3_url
+
+        if genre_ids:
             current_genres = get_genres_query(db, comic.id)
             current_genre_ids = {g.id for g in current_genres}
-            new_genre_ids = set(comic_data.genre_ids)
+            new_genre_ids = set(genre_ids)
 
-            ids_to_remove = current_genre_ids - new_genre_ids
+            ids_to_remove = current_genre_ids - genre_ids
             if ids_to_remove:
                 db.query(ComicGenre).filter(
                     ComicGenre.comic_id == comic_id,
@@ -97,15 +121,17 @@ def edit_comic(
                 if gid not in current_genre_ids:
                     db.add(ComicGenre(comic_id=comic_id, genre_id=gid))
 
-
-        if comic_data.new_author_ids is not None:
+        # Currently not allowing author addition
+        """
+        if new_author_ids is not None:
             existing_authors = get_comic_authors_query(db, comic.id)
             existing_author_ids = {a.author_id for a in existing_authors}
 
-            for auth_id in comic_data.new_author_ids:
+            for auth_id in new_author_ids:
                 if auth_id not in existing_author_ids:
                     db.add(ComicAuthor(comic_id=comic_id, author_id=auth_id))
-            
+        """
+
         db.commit()
         db.refresh(comic)
     
@@ -127,6 +153,7 @@ def edit_comic(
         cover_image_url=comic.cover_image_url,
         comic_status=comic.comic_status,
         avg_rating=comic.avg_rating,
+        view_count=comic.view_count,
         last_chapter_at=comic.last_chapter_at,
         authors=authors,
         genres=genres,
@@ -169,19 +196,6 @@ def get_all_comics(
         author_id: int | None = None,
         bookmarked: bool | None = None
     ):
-    # achieving latest chapter using Distinct (row_number in actual use, this is just for reference)
-    """
-    latest_chapter_subq = (
-        db.query(
-            Chapter.comic_id,
-            Chapter.id.label("chapter_id"),
-            Chapter.chapter_no
-        )
-        .filter(Chapter.approval_status == "approved")
-        .order_by(Chapter.comic_id, Chapter.chapter_no.desc())
-        .distinct(Chapter.comic_id)
-        .subquery()
-    ) """
 
     # get chapter rows ranked
     ranked_subq = (
@@ -196,9 +210,13 @@ def get_all_comics(
         )
         .label("rn")
     )
-    .filter(Chapter.approval_status == approval_status)
-    .subquery()
-)
+    )
+    if approval_status is not None:
+        ranked_subq = ranked_subq.filter(Chapter.approval_status == approval_status).subquery()
+    else:
+        ranked_subq = ranked_subq.subquery()
+
+
     # filter ranked chapter rows for the latest
     latest_chapter_subq = (
     db.query(ranked_subq)
@@ -217,7 +235,6 @@ def get_all_comics(
             latest_chapter_subq,
             Comic.id == latest_chapter_subq.c.comic_id
         )
-        .filter(Comic.approval_status == approval_status)
     )
 
     if author_id is not None:
@@ -227,6 +244,9 @@ def get_all_comics(
         ).filter(
             ComicAuthor.author_id == author_id
             )
+    else:
+        query = query.filter(Comic.approval_status == approval_status)
+
     
     if bookmarked and current_user is not None:
         query = query.join(
@@ -272,6 +292,7 @@ def get_all_comics(
             "cover_image_url": comic.cover_image_url,
             "avg_rating": comic.avg_rating,
             "comic_status": comic.comic_status,
+            "approval_status": comic.approval_status,
             "view_count": comic.view_count,
             "latest_chapter": {
                     "id": chapter_id,
@@ -284,12 +305,17 @@ def get_all_comics(
 def get_comic(
         db: Session,
         comic_id: int,
+        approved_only: bool = True,
         current_user: User | None = None
 ) -> ComicCompleteDetail:
-    comic = get_comic_details_query(db, comic_id)
+    if approved_only:
+        comic = get_comic_details_query(db, comic_id, approved_only)
+    else:
+        comic = get_comic_details_query(db, comic_id)
+
     authors = get_comic_authors_query(db, comic.id)
     genres = get_genres_query(db, comic.id)
-    
+        
     isBookmarked = get_bookmark_status_query(db, current_user, comic.id)
 
     return ComicCompleteDetail(
@@ -368,7 +394,8 @@ def get_comic(
 def change_comic_approval(
         db: Session,
         comic_id: int,
-        new_approval: Literal["pending", "approved", "rejected"] = "approved"
+        new_approval: Literal["pending", "approved", "rejected"] = "approved",
+        current_user: User | None = None
 ):
     comic = get_comic_details_query(db, comic_id)
 
